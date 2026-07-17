@@ -1,304 +1,244 @@
-# -*- coding: utf-8 -*-
-"""
-Wine Classifier Web App - Streamlit
-"""
-
+# ============================================
+# Streamlit Web Application for Loan Prediction
+# ============================================
 import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-import os
-import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
 
-# ===== ตั้งค่าหน้าเว็บ =====
+# Page Configuration
 st.set_page_config(
-    page_title="🍷 Wine Classifier",
-    page_icon="🍷",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Loan Status Prediction - SVM Model",
+    page_icon="🏦",
+    layout="wide"
 )
 
-# ===== Custom CSS สำหรับความสวยงาม =====
-st.markdown("""
-<style>
-    /* พื้นหลังหลัก */
-    .stApp {
-        background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf3 100%);
-    }
-    
-    /* Header */
-    .main-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 15px;
-        color: white;
-        text-align: center;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        margin-bottom: 2rem;
-    }
-    
-    .main-header h1 {
-        margin: 0;
-        font-size: 2.5rem;
-        font-weight: 700;
-    }
-    
-    .main-header p {
-        margin: 0.5rem 0 0 0;
-        opacity: 0.9;
-        font-size: 1.1rem;
-    }
-    
-    /* Card */
-    .card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 12px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        margin-bottom: 1rem;
-    }
-    
-    /* Prediction Result */
-    .prediction-box {
-        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-        padding: 2rem;
-        border-radius: 15px;
-        color: white;
-        text-align: center;
-        margin: 1rem 0;
-    }
-    
-    .prediction-box h2 {
-        margin: 0;
-        font-size: 2rem;
-    }
-    
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
-    }
-    
-    [data-testid="stSidebar"] * {
-        color: white !important;
-    }
-    
-    /* Button */
-    .stButton > button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        padding: 0.6rem 2rem;
-        border-radius: 8px;
-        font-weight: 600;
-        width: 100%;
-        transition: all 0.3s;
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-    }
-</style>
-""", unsafe_allow_html=True)
-
-
-# ===== โหลดโมเดล =====
+# Load Model and Preprocessing Objects
 @st.cache_resource
 def load_model():
-    """โหลดโมเดลและ scaler จากไฟล์"""
-    try:
-        model = joblib.load('model_files/dt_model.pkl')
-        scaler = joblib.load('model_files/scaler.pkl')
-        features = joblib.load('model_files/feature_names.pkl')
-        return model, scaler, features
-    except FileNotFoundError:
-        st.error("❌ ไม่พบไฟล์โมเดล กรุณาวางโฟลเดอร์ 'model_files' ในไดเรกทอรีเดียวกัน")
-        st.stop()
+    model = joblib.load('svm_loan_model.pkl')
+    scaler = joblib.load('scaler.pkl')
+    education_encoder = joblib.load('education_encoder.pkl')
+    home_encoder = joblib.load('home_encoder.pkl')
+    intent_encoder = joblib.load('intent_encoder.pkl')
+    return model, scaler, education_encoder, home_encoder, intent_encoder
 
+model, scaler, education_encoder, home_encoder, intent_encoder = load_model()
 
-model, scaler, features = load_model()
+# ============================================
+# Header
+# ============================================
+st.title("🏦 Loan Status Prediction System")
+st.markdown("### ทำนายสถานะการกู้ยืมด้วย Support Vector Machine (SVM)")
+st.markdown("---")
 
-# ชื่อคลาสไวน์
-WINE_NAMES = {
-    0: "🍷 Class 0 - ไวน์ชนิดที่ 1",
-    1: "🍷 Class 1 - ไวน์ชนิดที่ 2",
-    2: "🍷 Class 2 - ไวน์ชนิดที่ 3"
-}
+# ============================================
+# Sidebar - Input Form
+# ============================================
+st.sidebar.header("📝 กรอกข้อมูลผู้กู้ยืม")
 
-# ===== Sidebar =====
-with st.sidebar:
-    st.markdown("## 🍷 Wine Classifier")
+with st.sidebar.form("loan_form"):
+    st.subheader("ข้อมูลส่วนตัว")
+    
+    # Person Info
+    person_age = st.number_input("อายุ (ปี)", min_value=18, max_value=100, value=25, step=1)
+    person_gender = st.selectbox("เพศ", ["Male", "Female"])
+    person_education = st.selectbox(
+        "ระดับการศึกษา", 
+        ["High School", "Associate", "Bachelor", "Master", "Doctorate"]
+    )
+    person_income = st.number_input("รายได้ต่อปี ($)", min_value=0, value=50000, step=1000)
+    person_emp_exp = st.number_input("ประสบการณ์ทำงาน (ปี)", min_value=0, value=3, step=1)
+    person_home_ownership = st.selectbox(
+        "สถานะที่อยู่อาศัย", 
+        ["RENT", "OWN", "MORTGAGE", "OTHER"]
+    )
+    
     st.markdown("---")
-    st.markdown("""
-    **แอปพลิเคชันจำแนกประเภทไวน์**  
-    ใช้โมเดล Decision Tree ในการวิเคราะห์คุณสมบัติทางเคมีของไวน์
-    """)
+    st.subheader("ข้อมูลการกู้ยืม")
+    
+    loan_amnt = st.number_input("จำนวนเงินกู้ ($)", min_value=500, value=10000, step=500)
+    loan_intent = st.selectbox(
+        "วัตถุประสงค์การกู้", 
+        ["PERSONAL", "EDUCATION", "MEDICAL", "VENTURE", 
+         "HOMEIMPROVEMENT", "DEBTCONSOLIDATION"]
+    )
+    loan_int_rate = st.slider("อัตราดอกเบี้ย (%)", min_value=5.0, max_value=25.0, value=12.0, step=0.1)
+    loan_percent_income = st.slider("สัดส่วนเงินกู้ต่อรายได้", min_value=0.0, max_value=1.0, value=0.2, step=0.01)
+    
     st.markdown("---")
-    st.markdown("### 📊 ข้อมูล")
-    st.markdown("- **Dataset:** Wine Dataset")
-    st.markdown("- **Model:** Decision Tree")
-    st.markdown("- **Features:** 13 คุณสมบัติ")
-    st.markdown("- **Classes:** 3 ประเภท")
-    st.markdown("---")
-    st.markdown("### 🛠️ เทคโนโลยี")
-    st.markdown("- Python 3.x")
-    st.markdown("- scikit-learn")
-    st.markdown("- Streamlit")
-
-
-# ===== Header =====
-st.markdown("""
-<div class="main-header">
-    <h1>🍷 Wine Quality Classifier</h1>
-    <p>ระบบจำแนกประเภทไวน์ด้วย Decision Tree Machine Learning</p>
-</div>
-""", unsafe_allow_html=True)
-
-
-# ===== Input Form =====
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.markdown("### 🔬 ป้อนข้อมูลคุณสมบัติทางเคมี")
+    st.subheader("ประวัติเครดิต")
     
-    # สร้าง input fields สำหรับแต่ละ feature
-    input_data = {}
+    cb_person_cred_hist_length = st.number_input("ประวัติเครดิต (ปี)", min_value=0, value=5, step=1)
+    credit_score = st.slider("Credit Score", min_value=300, max_value=850, value=650, step=10)
+    previous_loan_defaults_on_file = st.selectbox("เคยผิดนัดชำระหนี้หรือไม่", ["No", "Yes"])
     
-    # แบ่ง features เป็น 2 คอลัมน์
-    half = len(features) // 2 + 1
-    left_features = features[:half]
-    right_features = features[half:]
-    
-    col_left, col_right = st.columns(2)
-    
-    # ค่าขอบเขตสำหรับแต่ละ feature (จากข้อมูล Wine)
-    feature_ranges = {
-        'alcohol': (10.0, 15.0, 12.5),
-        'malic_acid': (0.5, 5.0, 2.5),
-        'ash': (1.3, 3.5, 2.3),
-        'alcalinity_of_ash': (10.0, 30.0, 19.0),
-        'magnesium': (70.0, 160.0, 100.0),
-        'total_phenols': (0.8, 4.0, 2.3),
-        'flavanoids': (0.2, 5.0, 2.0),
-        'nonflavanoid_phenols': (0.1, 1.0, 0.4),
-        'proanthocyanins': (0.4, 4.0, 1.6),
-        'color_intensity': (1.5, 17.0, 5.0),
-        'hue': (0.3, 1.7, 0.95),
-        'od280/od315_of_diluted_wines': (1.2, 4.0, 2.6),
-        'proline': (250.0, 1700.0, 750.0)
+    submitted = st.form_submit_button("🔮 ทำนายผลลัพธ์", use_container_width=True)
+
+# ============================================
+# Main Content
+# ============================================
+if submitted:
+    # Prepare input data
+    input_data = {
+        'person_age': [person_age],
+        'person_gender': [0 if person_gender == "Male" else 1],
+        'person_education': [education_encoder.transform([person_education])[0]],
+        'person_income': [person_income],
+        'person_emp_exp': [person_emp_exp],
+        'person_home_ownership': [home_encoder.transform([person_home_ownership])[0]],
+        'loan_amnt': [loan_amnt],
+        'loan_intent': [intent_encoder.transform([loan_intent])[0]],
+        'loan_int_rate': [loan_int_rate],
+        'loan_percent_income': [loan_percent_income],
+        'cb_person_cred_hist_length': [cb_person_cred_hist_length],
+        'credit_score': [credit_score],
+        'previous_loan_defaults_on_file': [1 if previous_loan_defaults_on_file == "Yes" else 0]
     }
     
-    with col_left:
-        for feat in left_features:
-            min_v, max_v, default = feature_ranges.get(feat, (0, 10, 5))
-            input_data[feat] = st.number_input(
-                feat.replace('_', ' ').title(),
-                min_value=float(min_v),
-                max_value=float(max_v),
-                value=float(default),
-                step=0.1
-            )
+    input_df = pd.DataFrame(input_data)
     
-    with col_right:
-        for feat in right_features:
-            min_v, max_v, default = feature_ranges.get(feat, (0, 10, 5))
-            input_data[feat] = st.number_input(
-                feat.replace('_', ' ').title(),
-                min_value=float(min_v),
-                max_value=float(max_v),
-                value=float(default),
-                step=0.1
-            )
+    # Scale features
+    input_scaled = scaler.transform(input_df)
     
-    # ปุ่มทำนาย
-    st.markdown("<br>", unsafe_allow_html=True)
-    predict_button = st.button("🔮 ทำนายผล", use_container_width=True)
-
-
-with col2:
-    st.markdown("### 📋 ข้อมูลที่ป้อน")
+    # Predict
+    prediction = model.predict(input_scaled)[0]
+    probability = model.predict_proba(input_scaled)[0]
     
-    # แสดงข้อมูลที่ป้อนในรูปแบบ DataFrame
-    input_df = pd.DataFrame([input_data])
-    st.dataframe(input_df.T.rename(columns={0: 'ค่า'}), use_container_width=True)
+    # Display Results
+    st.markdown("---")
+    st.header("📊 ผลการทำนาย")
     
-    # ปุ่ม Reset
-    if st.button("🔄 รีเซ็ตค่า", use_container_width=True):
-        st.rerun()
-
-
-# ===== Prediction =====
-if predict_button:
-    with st.spinner("🤖 กำลังวิเคราะห์ข้อมูล..."):
-        # Transform ข้อมูลด้วย scaler เดียวกันกับตอนฝึก
-        input_array = np.array([list(input_data.values())])
-        input_scaled = scaler.transform(input_array)
-        
-        # ทำนาย
-        prediction = model.predict(input_scaled)[0]
-        probabilities = model.predict_proba(input_scaled)[0]
-        
-        st.markdown("---")
-        
-        # แสดงผลการทำนาย
-        st.markdown(f"""
-        <div class="prediction-box">
-            <h2>{WINE_NAMES[prediction]}</h2>
-            <p style="margin-top: 0.5rem; font-size: 1.2rem;">
-                ความมั่นใจ: {probabilities[prediction]*100:.2f}%
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # แสดงความน่าจะเป็นของแต่ละคลาส
-        st.markdown("### 📊 ความน่าจะเป็นของแต่ละคลาส")
-        
-        prob_df = pd.DataFrame({
-            'คลาส': [WINE_NAMES[i] for i in range(3)],
-            'ความน่าจะเป็น (%)': [p * 100 for p in probabilities]
-        })
-        
-        col_a, col_b = st.columns([1, 2])
-        
-        with col_a:
-            st.dataframe(prob_df, use_container_width=True, hide_index=True)
-        
-        with col_b:
-            # Bar chart แสดงความน่าจะเป็น
-            chart_df = pd.DataFrame(
-                probabilities * 100,
-                index=['Class 0', 'Class 1', 'Class 2'],
-                columns=['ความน่าจะเป็น (%)']
-            )
-            st.bar_chart(chart_df, color='#667eea')
-        
-        # Feature Importance
-        st.markdown("---")
-        st.markdown("### 🎯 Feature Importance")
-        
-        importance_df = pd.DataFrame({
-            'Feature': features,
-            'Importance': model.feature_importances_
-        }).sort_values('Importance', ascending=True)
-        
-        # กรองเฉพาะ features ที่มี importance > 0
-        importance_df = importance_df[importance_df['Importance'] > 0]
-        
-        if len(importance_df) > 0:
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.barh(importance_df['Feature'], importance_df['Importance'], 
-                    color='#667eea', edgecolor='white')
-            ax.set_xlabel('Importance')
-            ax.set_title('Feature Importance จากโมเดล Decision Tree')
-            st.pyplot(fig)
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if prediction == 0:
+            st.success("✅ ผ่านการอนุมัติ")
+            st.metric("สถานะ", "ไม่ผิดนัดชำระ", delta="Low Risk")
         else:
-            st.info("โมเดลไม่ได้ใช้ features ใดๆ ในการตัดสินใจ")
+            st.error("❌ ไม่ผ่านการอนุมัติ")
+            st.metric("สถานะ", "มีความเสี่ยงผิดนัด", delta="High Risk")
+    
+    with col2:
+        st.metric("ความมั่นใจ (ไม่ผิดนัด)", f"{probability[0]*100:.2f}%")
+    
+    with col3:
+        st.metric("ความมั่นใจ (ผิดนัด)", f"{probability[1]*100:.2f}%")
+    
+    # Probability Visualization
+    st.markdown("---")
+    st.subheader("📈 ความน่าจะเป็นของการทำนาย")
+    
+    fig = go.Figure(data=[
+        go.Bar(
+            name='Probability',
+            x=['ไม่ผิดนัด (0)', 'ผิดนัด (1)'],
+            y=[probability[0], probability[1]],
+            marker_color=['#2ecc71', '#e74c3c'],
+            text=[f'{probability[0]*100:.2f}%', f'{probability[1]*100:.2f}%'],
+            textposition='auto'
+        )
+    ])
+    
+    fig.update_layout(
+        yaxis_title='Probability',
+        yaxis_range=[0, 1],
+        height=400,
+        showlegend=False
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Input Summary
+    st.markdown("---")
+    st.subheader("📋 สรุปข้อมูลที่กรอก")
+    
+    summary_data = {
+        'Feature': [
+            'อายุ', 'เพศ', 'การศึกษา', 'รายได้ต่อปี', 'ประสบการณ์ทำงาน',
+            'สถานะที่อยู่อาศัย', 'จำนวนเงินกู้', 'วัตถุประสงค์', 'อัตราดอกเบี้ย',
+            'สัดส่วนเงินกู้ต่อรายได้', 'ประวัติเครดิต (ปี)', 'Credit Score',
+            'เคยผิดนัดชำระ'
+        ],
+        'Value': [
+            f"{person_age} ปี",
+            person_gender,
+            person_education,
+            f"${person_income:,.0f}",
+            f"{person_emp_exp} ปี",
+            person_home_ownership,
+            f"${loan_amnt:,.0f}",
+            loan_intent,
+            f"{loan_int_rate}%",
+            f"{loan_percent_income*100:.1f}%",
+            f"{cb_person_cred_hist_length} ปี",
+            credit_score,
+            previous_loan_defaults_on_file
+        ]
+    }
+    
+    summary_df = pd.DataFrame(summary_data)
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
+else:
+    # Welcome message
+    st.info("👈 กรุณากรอกข้อมูลในฟอร์มด้านซ้ายเพื่อทำนายสถานะการกู้ยืม")
+    
+    # Show some statistics
+    st.markdown("---")
+    st.subheader("📊 ข้อมูลโมเดล")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Algorithm", "SVM (RBF Kernel)")
+    
+    with col2:
+        st.metric("Features", "13 ตัวแปร")
+    
+    with col3:
+        st.metric("Model Type", "Classification")
+    
+    # Feature importance explanation
+    st.markdown("---")
+    st.subheader("🔍 ตัวแปรที่ใช้ในการทำนาย")
+    
+    features_info = pd.DataFrame({
+        'ตัวแปร': [
+            'person_age', 'person_gender', 'person_education', 'person_income',
+            'person_emp_exp', 'person_home_ownership', 'loan_amnt', 'loan_intent',
+            'loan_int_rate', 'loan_percent_income', 'cb_person_cred_hist_length',
+            'credit_score', 'previous_loan_defaults_on_file'
+        ],
+        'คำอธิบาย': [
+            'อายุของผู้กู้ยืม',
+            'เพศ (Male=0, Female=1)',
+            'ระดับการศึกษา',
+            'รายได้ต่อปี',
+            'จำนวนปีประสบการณ์ทำงาน',
+            'สถานะที่อยู่อาศัย (RENT/OWN/MORTGAGE/OTHER)',
+            'จำนวนเงินที่ต้องการกู้',
+            'วัตถุประสงค์การกู้ยืม',
+            'อัตราดอกเบี้ย',
+            'สัดส่วนเงินกู้ต่อรายได้',
+            'จำนวนปีที่มีประวัติเครดิต',
+            'คะแนนเครดิต (300-850)',
+            'ประวัติการผิดนัดชำระหนี้ (Yes=1, No=0)'
+        ]
+    })
+    
+    st.dataframe(features_info, use_container_width=True, hide_index=True)
 
-# ===== Footer =====
+# Footer
 st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: #666; padding: 1rem;'>
-    <p>🎓 พัฒนาเพื่อการศึกษา | Decision Tree Classifier with Streamlit</p>
-</div>
-""", unsafe_allow_html=True)
+st.markdown(
+    """
+    <div style='text-align: center; color: gray;'>
+        <p>🏦 Loan Status Prediction System | Powered by SVM & Streamlit</p>
+        <p>Developed with ❤️ using Python</p>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
